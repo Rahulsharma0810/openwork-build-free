@@ -1,4 +1,4 @@
-name: Build Free Screenpipe (macOS arm64, unsigned)
+name: Build Free Screenpipe / Worklog (macOS arm64)
 run-name: >-
   Build Free ${{
     (github.event.inputs.pr || github.event.client_payload.pr) && format('PR #{0}', github.event.inputs.pr || github.event.client_payload.pr) ||
@@ -65,6 +65,10 @@ on:
         description: "Native updater pulls from this repo's latest GitHub Release (signed latest.json)"
         type: boolean
         default: true
+      patch_white_label:
+        description: "Personal patch: ship as Worklog (own bundle id/scheme/publisher) with no screenpipe telemetry, cloud AI or Pi bootstrap"
+        type: boolean
+        default: true
       build_engine:
         description: "Also build standalone engine CLI (crates/screenpipe-engine `screenpipe` binary)"
         type: boolean
@@ -89,6 +93,20 @@ env:
   PATCH_UNLIMITED_PIPES: ${{ format('{0}', github.event.inputs.patch_unlimited_pipes) != 'false' && format('{0}', github.event.client_payload.patch_unlimited_pipes) != 'false' && 'true' || 'false' }}
   PATCH_NO_TRIAL_PAYWALL: ${{ format('{0}', github.event.inputs.patch_no_trial_paywall) != 'false' && format('{0}', github.event.client_payload.patch_no_trial_paywall) != 'false' && 'true' || 'false' }}
   PATCH_SELF_UPDATER: ${{ format('{0}', github.event.inputs.patch_self_updater) != 'false' && format('{0}', github.event.client_payload.patch_self_updater) != 'false' && 'true' || 'false' }}
+  PATCH_WHITE_LABEL: ${{ format('{0}', github.event.inputs.patch_white_label) != 'false' && format('{0}', github.event.client_payload.patch_white_label) != 'false' && 'true' || 'false' }}
+  # White-label identity (scripts/white-label/apply.ts, branding/brand.json).
+  # Override per run with repository_dispatch client_payload.wl_* if needed.
+  WL_REPO_ROOT: ${{ github.workspace }}
+  WL_PRODUCT_NAME: Worklog
+  WL_BUNDLE_ID: worklog.rvs.memory
+  WL_PUBLISHER: Rahul Sharma
+  WL_SCHEME: worklog
+  # Discard control-plane host: every remaining screenpipe.com call fails fast
+  # locally instead of reaching screenpipe's servers.
+  WL_WEB_BASE: http://127.0.0.1:9
+  WL_AI_BASE_URL: http://localhost:11434/v1
+  # build-free.yml keeps the self-hosted updater (this repo's releases).
+  WL_KEEP_SELF_UPDATER: "1"
   SELF_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
   # Stable self-signed code-signing identity (MACOS_CODESIGN_P12_BASE64), so
   # the designated requirement (and thus TCC grants) survives updates.
@@ -951,6 +969,42 @@ jobs:
           mv "$tmp" "$CONF"
           jq '.plugins.updater, .bundle.createUpdaterArtifacts' "$CONF"
 
+      - name: Checkout white-label scripts
+        if: env.PATCH_WHITE_LABEL == 'true'
+        uses: actions/checkout@v6
+        with:
+          path: .wl
+          fetch-depth: 1
+
+      - name: Apply white-label branding + offline patches
+        # Rewrites identity (productName, bundle id, scheme, publisher, menu,
+        # tray, keychain service, self-detection) and removes outbound
+        # telemetry / hosted AI / Pi bootstrap. Fail-closed like
+        # personal-patches.sh: upstream drift breaks the build, not the brand.
+        if: env.PATCH_WHITE_LABEL == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Stage the branding scripts into the upstream worktree so the patcher
+          # resolves the repo root the same way it does locally.
+          mkdir -p scripts
+          cp -r .wl/scripts/white-label scripts/white-label
+          cp -r .wl/branding branding
+          rm -rf .wl
+          bun scripts/white-label/apply.ts
+          echo "--- branded identity ---"
+          jq '{productName, identifier, version, targets: .bundle.targets, publisher: .bundle.publisher, updater: .plugins.updater}' \
+            apps/screenpipe-app-tauri/src-tauri/tauri.conf.json
+          # Bake the same offline settings into the frontend + Rust build.
+          {
+            echo "NEXT_PUBLIC_SCREENPIPE_WEB_URL=$WL_WEB_BASE"
+            echo "NEXT_PUBLIC_SCREENPIPE_OFFLINE=true"
+            echo "NEXT_PUBLIC_SCREENPIPE_DISABLE_REMOTE_ANNOUNCEMENTS=true"
+            echo "SCREENPIPE_DISABLE_TELEMETRY=1"
+            echo "ASSET_PREFIX=$(printf '%s' "$WL_PRODUCT_NAME" | tr '[:upper:]' '[:lower:]')"
+            echo "BRAND_TITLE=$WL_PRODUCT_NAME"
+          } >> "$GITHUB_ENV"
+
       - name: Pin bundle version to release tag (fix stale embedded version)
         # The upstream release TAG (e.g. app-v2.5.132) is the source of truth for
         # what version we are shipping, but the bundle version has been observed to
@@ -1507,8 +1561,9 @@ jobs:
           echo "Creating DMG ..."
           DMG_DIR="$BUNDLE/dmg"
           mkdir -p "$DMG_DIR"
-          DMG_PATH="$DMG_DIR/screenpipe.dmg"
-          hdiutil create -volname "screenpipe" \
+          APP_NAME="$(basename "$APP" .app)"
+          DMG_PATH="$DMG_DIR/$APP_NAME.dmg"
+          hdiutil create -volname "$APP_NAME" \
             -srcfolder "$APP" -ov -format UDZO "$DMG_PATH"
           echo "Created DMG: $DMG_PATH"
           ls -lh "$DMG_PATH"
@@ -1526,6 +1581,15 @@ jobs:
           echo "app_path=$APP" >> "$GITHUB_OUTPUT"
           echo "dmg_path=$DMG" >> "$GITHUB_OUTPUT"
 
+      - name: Verify white-label bundle (identity, no screenpipe hosts/keys)
+        # Refuses to ship a bundle that still carries screenpipe's bundle id,
+        # service hosts, PostHog key or "Mediar, Inc." publisher string.
+        if: env.PATCH_WHITE_LABEL == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun scripts/white-label/verify.ts --app "${{ steps.out.outputs.app_path }}"
+
       - name: Copy DMG for upload (outside source dir)
         shell: bash
         run: |
@@ -1533,7 +1597,7 @@ jobs:
           STAGE="$RUNNER_TEMP/stage"
           mkdir -p "$STAGE"
           if [ -n "${{ steps.out.outputs.dmg_path }}" ]; then
-            cp "${{ steps.out.outputs.dmg_path }}" "$STAGE/screenpipe-macos-arm64.dmg"
+            cp "${{ steps.out.outputs.dmg_path }}" "$STAGE/${ASSET_PREFIX:-screenpipe}-macos-arm64.dmg"
           else
             echo "Error: No DMG path found" >&2
             exit 1
@@ -1553,7 +1617,7 @@ jobs:
           set -euo pipefail
           APP="$GITHUB_WORKSPACE/${{ steps.out.outputs.app_path }}"
           STAGE="$RUNNER_TEMP/stage"
-          ASSET="screenpipe-macos-arm64.app.tar.gz"
+          ASSET="${ASSET_PREFIX:-screenpipe}-macos-arm64.app.tar.gz"
           # Archive the FINAL re-signed .app (tauri's own updater tarball, if
           # any, predates our codesign pass). No AppleDouble/mac metadata: the
           # updater's tar extractor would write ._* files into the bundle.
@@ -1564,7 +1628,7 @@ jobs:
           URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${ASSET}"
           jq -n \
             --arg v "$APP_VERSION" \
-            --arg notes "screenpipe-build-free ${TAG} (build ${{ github.run_number }})" \
+            --arg notes "${BRAND_TITLE:-screenpipe-build-free} ${TAG} (build ${{ github.run_number }})" \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg sig "$(cat "$STAGE/$ASSET.sig")" \
             --arg url "$URL" \
@@ -1582,7 +1646,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: screenpipe-macos-arm64-${{ steps.feats.outputs.version }}
+          name: ${{ env.ASSET_PREFIX || 'screenpipe' }}-macos-arm64-${{ steps.feats.outputs.version }}
           path: ${{ runner.temp }}/stage/*
           if-no-files-found: error
           retention-days: 14
@@ -1624,7 +1688,7 @@ jobs:
           if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --repo "${{ github.repository }}" \
-              --title "Screenpipe $TAG (Free)" \
+              --title "${{ env.BRAND_TITLE || 'Screenpipe' }} $TAG" \
               --notes "Bypassed entitlement checks and pre-built with Metal/Apple Intelligence support."
           fi
           gh release upload "$TAG" \

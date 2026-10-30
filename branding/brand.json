@@ -1,0 +1,20 @@
+{
+  "$comment": "Single source of truth for the white-label build. Patched into the tree by scripts/white-label/apply.ts at build time; never committed as edits to upstream files.",
+  "productName": "Worklog",
+  "bundleId": "worklog.rvs.memory",
+  "publisher": "Rahul Sharma",
+  "scheme": "worklog",
+  "trayId": "worklog_main",
+  "offline": {
+    "webBase": "http://127.0.0.1:9",
+    "aiBaseUrl": "http://localhost:11434/v1",
+    "skipOnboarding": true,
+    "disableTelemetry": true,
+    "disableRemoteAnnouncements": true,
+    "disablePiBootstrap": true
+  },
+  "signing": {
+    "identityEnv": "WL_CODESIGN_IDENTITY",
+    "commonName": "Worklog Local Signing"
+  }
+}

@@ -69,3 +69,9 @@ Local copies live in `~/.config/screenpipe-build-free/`. **Back them up.** If yo
 - TCC usage keys (Mic, Screen, Camera, Accessibility, AppleEvents) injected into Info.plist by CI
 - Build guard prevents shipping stale DMGs (verifies embedded binary version matches release tag)
 - Unclean PR patches are skipped (Tier-4 whole-file overwrite removed) — builds pristine upstream
+
+## White-label (Worklog)
+
+`patch_white_label` (default on) rebrands the app to **Worklog** (`worklog.rvs.memory`, scheme `worklog`, publisher "Rahul Sharma") and removes all outbound screenpipe traffic: telemetry (PostHog/Sentry/attribution), the hosted AI gateway (defaults to local Ollama), the Pi/npm bootstrap, and the login/entitlement gate (via `SCREENPIPE_SKIP_ONBOARDING`). The self-hosted updater still points at this repo's releases, which is not a screenpipe connection.
+
+When `patch_white_label` is on, the bundle is also run through `scripts/white-label/verify.ts`, which fails the build if any screenpipe bundle id, service host (`screenpipe.com`, `api.screenpipe.com`, `screenpi.pe`, `us.i.posthog.com`), PostHog key, or the `Mediar, Inc.` publisher string survives in the binary or bundled JS.

@@ -10,7 +10,7 @@ GitHub Actions builds of upstream [screenpipe](https://github.com/screenpipe/scr
 
 ## Install & updates
 
-1. Download the DMG from the [latest release](https://github.com/Rahulsharma0810/screenpipe-build-free/releases/latest) and drag `screenpipe.app` to `/Applications` (once).
+1. Download the DMG from the [latest release](https://github.com/Rahulsharma0810/openwork-build-free/releases/latest) and drag `screenpipe.app` to `/Applications` (once).
 2. Gatekeeper: right-click the app → **Open**, or run
    ```bash
    xattr -dr com.apple.quarantine /Applications/screenpipe.app
@@ -37,7 +37,7 @@ Other inputs: `build_engine` (default off; also ships a standalone `screenpipe` 
 ## Manual builds
 
 ```bash
-gh workflow run build-free.yml -R Rahulsharma0810/screenpipe-build-free \
+gh workflow run build-free.yml -R Rahulsharma0810/openwork-build-free \
   --ref build-free/auto -f ref=app-vX.Y.Z
 ```
 
@@ -62,7 +62,7 @@ Local copies live in `~/.config/screenpipe-build-free/`. **Back them up.** If yo
 ## Build notes
 
 - CI signs with the stable self-signed identity `screenpipe-build-free` (secret `MACOS_CODESIGN_P12_BASE64`, temp keychain, deleted after the run). The designated requirement pins the certificate leaf hash, so TCC grants survive updates.
-- Self-updater (`PATCH_SELF_UPDATER`, default on): the native Screenpipe updater checks `https://github.com/Rahulsharma0810/screenpipe-build-free/releases/latest/download/latest.json`. Each release carries `screenpipe-macos-arm64.app.tar.gz` (the final re-signed .app), its minisign `.sig` (`TAURI_SIGNING_PRIVATE_KEY`) and `latest.json`; the release is marked Latest.
+- Self-updater (`PATCH_SELF_UPDATER`, default on): the native Screenpipe updater checks `https://github.com/Rahulsharma0810/openwork-build-free/releases/latest/download/latest.json`. Each release carries `screenpipe-macos-arm64.app.tar.gz` (the final re-signed .app), its minisign `.sig` (`TAURI_SIGNING_PRIVATE_KEY`) and `latest.json`; the release is marked Latest.
 - App version is `X.Y.(Z*1000 + run_number%1000)` from upstream `app-vX.Y.Z` (e.g. 2.7.84 built in run 353 -> `2.7.84353`). Tauri compares plain semver (`>`), and a prerelease suffix would sort *below* the release, so a numeric patch is used: rebuilds of the same tag are newer, and the next upstream patch always beats any rebuild. Only wraps after 1000 runs on a single upstream patch.
 - Signing is inside-out: dylibs/.so/.metallib first, then executables, then outer bundle
 - Post-sign quarantine cleared via `xattr -dr com.apple.quarantine` (never `xattr -cr` — preserves cs.* xattrs for metallib)

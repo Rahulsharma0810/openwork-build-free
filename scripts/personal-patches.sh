@@ -36,7 +36,7 @@ PATCH_LOCAL_ACCESS="${PATCH_LOCAL_ACCESS:-true}"
 PATCH_UNLIMITED_PIPES="${PATCH_UNLIMITED_PIPES:-true}"
 PATCH_NO_TRIAL_PAYWALL="${PATCH_NO_TRIAL_PAYWALL:-true}"
 PATCH_SELF_UPDATER="${PATCH_SELF_UPDATER:-true}"
-SELF_UPDATER_ENDPOINT="${SELF_UPDATER_ENDPOINT:-https://github.com/Rahulsharma0810/screenpipe-build-free/releases/latest/download/latest.json}"
+SELF_UPDATER_ENDPOINT="${SELF_UPDATER_ENDPOINT:-https://github.com/Rahulsharma0810/openwork-build-free/releases/latest/download/latest.json}"
 
 # replace_exact FILE FROM TO LABEL — literal (non-regex) single-occurrence replace.
 replace_exact() {

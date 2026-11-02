@@ -110,7 +110,7 @@ env:
   SELF_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
   # Stable self-signed code-signing identity (MACOS_CODESIGN_P12_BASE64), so
   # the designated requirement (and thus TCC grants) survives updates.
-  SIGN_IDENTITY: screenpipe-build-free
+  SIGN_IDENTITY: openwork-build-free
   BUILD_ENGINE: ${{ (github.event.inputs.build_engine == 'true' || github.event.client_payload.build_engine == true) && 'true' || 'false' }}
 
 jobs:

@@ -1581,11 +1581,13 @@ jobs:
           # Verify
           echo "::group::Signature verification"
           /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
-          # The designated requirement must pin the stable cert (leaf hash), not
-          # a per-build cdhash, so TCC grants survive updates.
+          # The designated requirement must pin the stable cert, not a per-build
+          # cdhash, so TCC grants survive updates. A CA-issued leaf signs as
+          # `certificate leaf = H"..."`; a self-signed cert is its own root, so
+          # codesign emits `certificate root = H"..."` instead. Accept either.
           DR=$(/usr/bin/codesign -d -r - "$APP" 2>&1)
           echo "$DR"
-          echo "$DR" | grep -q 'certificate leaf = H"' || { echo "::error::designated requirement does not pin the certificate leaf"; exit 1; }
+          echo "$DR" | grep -qE 'certificate (leaf|root) = H"' || { echo "::error::designated requirement does not pin the certificate"; exit 1; }
           echo "::endgroup::"
           echo "✓ .app bundle signed successfully"
 

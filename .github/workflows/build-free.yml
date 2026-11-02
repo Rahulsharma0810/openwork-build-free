@@ -1442,6 +1442,23 @@ jobs:
           ensure_usage_key "NSAccessibilityUsageDescription" "This app requires accessibility access to capture UI activity."
           ensure_usage_key "NSAppleEventsUsageDescription"   "This app uses Apple Events to integrate with other apps."
 
+          # White-label: rewrite any leftover "screenpipe" tokens in the bundled
+          # Info.plist (usage strings, helper descriptions) to the brand name.
+          # Run in the FINISHED bundle so the binary-embedded copy cannot
+          # re-introduce it after our source-level patch.
+          if [ "${PATCH_WHITE_LABEL:-false}" = "true" ] && [ -n "${BRAND_TITLE:-}" ]; then
+            PLIST="$APP/Contents/Info.plist"
+            for k in NSMicrophoneUsageDescription NSScreenCaptureUsageDescription NSCameraUsageDescription NSAccessibilityUsageDescription NSAppleEventsUsageDescription; do
+              cur=$(/usr/libexec/PlistBuddy -c "Print :$k" "$PLIST" 2>/dev/null || echo "")
+              case "$cur" in
+                *screenpipe*|*Screenpipe*|*SCREENPIPE*)
+                  new=$(printf '%s' "$cur" | sed -E "s/[sS]creenpipe/${BRAND_TITLE}/g")
+                  /usr/libexec/PlistBuddy -c "Set :$k $new" "$PLIST" && echo "  rebranded $k"
+                  ;;
+              esac
+            done
+          fi
+
       - name: Import code-signing identity (temp keychain)
         shell: bash
         env:

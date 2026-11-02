@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,9 +32,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = process.env.WL_REPO_ROOT?.trim() || resolve(HERE, "..", "..");
 
 export function loadBrand(root: string = REPO_ROOT): Brand {
-  const brand = JSON.parse(
-    readFileSync(join(root, "branding", "brand.json"), "utf8"),
-  ) as Brand;
+  // Prefer the branding shipped next to the scripts (the tooling repo), fall
+  // back to one staged into the patched worktree. CI copies both.
+  const candidates = [resolve(HERE, "..", "..", "branding", "brand.json"), join(root, "branding", "brand.json")];
+  const path = candidates.find((candidate) => existsSync(candidate));
+  if (!path) {
+    throw new Error(`branding: brand.json not found (looked in ${candidates.join(", ")})`);
+  }
+  const brand = JSON.parse(readFileSync(path, "utf8")) as Brand;
 
   // Env overrides let CI drive identity without editing the checked-in file.
   brand.productName = process.env.WL_PRODUCT_NAME?.trim() || brand.productName;

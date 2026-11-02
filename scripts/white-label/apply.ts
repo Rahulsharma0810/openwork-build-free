@@ -105,14 +105,16 @@ function editJson(file: string, label: string, mutate: (json: any) => void): voi
 function rewriteHosts(brand: Brand): void {
   const roots = [
     `${TAURI_DIR}/src`,
+    `${TAURI_DIR}/swift`,
+    `${TAURI_DIR}/livetext-stress`,
     `${APP_DIR}/lib`,
     `${APP_DIR}/app`,
     `${APP_DIR}/components`,
     "crates",
   ];
-  const exts = new Set([".rs", ".ts", ".tsx", ".js", ".mjs"]);
+  const exts = new Set([".rs", ".ts", ".tsx", ".js", ".mjs", ".swift", ".json"]);
   const skipDirs = new Set(["node_modules", "target", ".git", "dist", "out", ".next", "gen"]);
-  const from = ["https://api.screenpipe.com", "https://screenpipe.com", "https://screenpi.pe"];
+  const from = ["https://api.screenpipe.com", "https://screenpipe.com", "https://screenpi.pe", "https://us.i.posthog.com"];
   const to = brand.offline.webBase;
 
   let files = 0;
@@ -132,7 +134,36 @@ function rewriteHosts(brand: Brand): void {
       }
       const dot = entry.lastIndexOf(".");
       if (dot < 0 || !exts.has(entry.slice(dot))) continue;
-      const text = readFileSync(entryAbs, "utf8");
+      let text: string;
+      try {
+        text = readFileSync(entryAbs, "utf8");
+      } catch {
+        continue; // binary or non-UTF8 file
+      }
+      // Strip header comments: they mention screenpipe hosts, and strings(1)
+      // scans the whole binary — including comment string data — so the
+      // post-build verifier would still see them. URLs in code survive; only
+      // whole-line `//`, `///` and `#` comments are removed.
+      // Only strip comments OUTSIDE string literals: several Rust files embed
+      // the header in a `&str` constant (specta_bindings.rs) and removing it
+      // mid-string breaks the file. strings(1) sees constants either way, but
+      // those constants are rewritten by the host pass below anyway.
+      const inString = (idx: number): boolean => {
+        let inStr = false;
+        for (let i = 0; i < idx; i++) {
+          const ch = text[i];
+          if (ch === '"' && text[i - 1] !== "\\") inStr = !inStr;
+        }
+        return inStr;
+      };
+      if (!entry.endsWith(".json")) {
+        const commentRe = entry.endsWith(".rs")
+          ? /^\s*\/\/[^/\n]*$/gm // Rust: only `//` lines; `#` starts attributes
+          : /^\s*(\/\/[^/\n]*|\/\/\/[^\n]*|#[^\n]*)$/gm;
+        text = text.replace(commentRe, (match, offset: number) =>
+          inString(offset) ? match : "",
+        );
+      }
       if (!from.some((host) => text.includes(host))) continue;
       let next = text;
       let local = 0;
@@ -144,7 +175,12 @@ function rewriteHosts(brand: Brand): void {
       if (local === 0) continue;
       files += 1;
       hits += local;
-      if (!CHECK_ONLY) writeFileSync(entryAbs, next);
+      if (!CHECK_ONLY) {
+        // Keep the line count stable so error locations don't shift: blank the
+        // comment instead of deleting the line.
+        next = next.replace(/\n{3,}/g, "\n\n");
+        writeFileSync(entryAbs, next);
+      }
     }
   };
 

@@ -107,16 +107,24 @@ function rewriteHosts(brand: Brand): void {
     `${TAURI_DIR}/src`,
     `${TAURI_DIR}/swift`,
     `${TAURI_DIR}/livetext-stress`,
+    // Embedded into the binary via include_str! (pi.rs, grokbot.rs, …).
+    `${TAURI_DIR}/assets`,
     `${APP_DIR}/lib`,
     `${APP_DIR}/app`,
     `${APP_DIR}/components`,
     "crates",
+    // feedback-tool.ts / video-tool.ts / context-tool.ts are embedded via
+    // include_str! from pi.rs; the whole package source must be branded.
+    "packages/workflows-ui/src",
   ];
   // The Tauri binary embeds the Next.js static export (`frontendDist: ../out`)
   // and never touches Contents/Resources, so brand the built site too when it
   // exists (build-free.yml builds the frontend before `tauri build`).
   if (existsSync(join(REPO_ROOT, `${APP_DIR}/out`))) roots.push(`${APP_DIR}/out`);
-  const exts = new Set([".rs", ".ts", ".tsx", ".js", ".mjs", ".swift", ".json", ".html", ".css", ".jsx"]);
+  // .sql is required: sqlx::migrate!("./src/migrations") in screenpipe-db
+  // embeds every migration file (with its screenpi.pe header comment) into the
+  // compiled binary. .c is required: build scripts compile shim/test C files.
+  const exts = new Set([".rs", ".ts", ".tsx", ".js", ".mjs", ".swift", ".json", ".html", ".css", ".jsx", ".sql", ".c", ".toml"]);
   const skipDirs = new Set(["node_modules", "target", ".git", "dist", "out", ".next", "gen"]);
   const from = ["https://api.screenpipe.com", "https://screenpipe.com", "https://screenpi.pe", "https://us.i.posthog.com"];
   const to = brand.offline.webBase;
@@ -160,15 +168,27 @@ function rewriteHosts(brand: Brand): void {
         }
         return inStr;
       };
+      const originalText = text;
       if (!entry.endsWith(".json") && !entry.endsWith(".html") && !entry.endsWith(".css")) {
+        // Comment syntax varies by file type. Rust: only `//` (`#` = attribute).
+        // SQL: only `--`. TOML/shell: only `#`. JS/TS/Swift/C: `//` and `///`.
+        // Only blank comment lines that carry a forbidden host — a blanket
+        // strip would erase legitimate schema/code docs and bloat the diff.
+        // (The gate scans the binary for host URLs; the bare word "screenpipe"
+        // in copy is tracked separately and is allowed.)
         const commentRe = entry.endsWith(".rs")
-          ? /^\s*\/\/[^/\n]*$/gm // Rust: only `//` lines; `#` starts attributes
-          : /^\s*(\/\/[^/\n]*|\/\/\/[^\n]*|#[^\n]*)$/gm;
+          ? /^[ \t]*\/\/[^\n]*$/gm
+          : entry.endsWith(".sql")
+            ? /^[ \t]*--[^\n]*$/gm
+            : entry.endsWith(".toml")
+              ? /^[ \t]*#[^\n]*$/gm
+              : /^[ \t]*(\/\/[^\n]*|#[^\n]*)$/gm;
+        const needsStrip = (line: string): boolean =>
+          from.some((host) => line.includes(host));
         text = text.replace(commentRe, (match, offset: number) =>
-          inString(offset) ? match : "",
+          !inString(offset) && needsStrip(match) ? "" : match,
         );
       }
-      if (!from.some((host) => text.includes(host))) continue;
       let next = text;
       let local = 0;
       for (const host of from) {
@@ -176,9 +196,15 @@ function rewriteHosts(brand: Brand): void {
         local += parts.length - 1;
         next = parts.join(to);
       }
-      if (local === 0) continue;
-      files += 1;
-      hits += local;
+      // Write when we stripped a comment OR rewrote a host. A file whose only
+      // host lived inside a comment has `local === 0` after stripping, but the
+      // stripped text must still be persisted or the original keeps the host.
+      const changed = next !== originalText;
+      if (!changed) continue;
+      if (local > 0) {
+        files += 1;
+        hits += local;
+      }
       if (!CHECK_ONLY) {
         // Keep the line count stable so error locations don't shift: blank the
         // comment instead of deleting the line.

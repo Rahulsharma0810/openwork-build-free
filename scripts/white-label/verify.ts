@@ -103,10 +103,15 @@ function main(): void {
     record("offline env baked into Info.plist", offlineEnv, offlineEnv ? "" : env.out.slice(0, 120));
 
     const plistText = readFileSync(infoPlist, "utf8");
+    // Only the user-facing permission strings must carry the brand; the
+    // LSEnvironment vars (SCREENPIPE_*) intentionally keep their upstream
+    // names because the Rust code reads those env keys.
+    const usageBlocks = plistText.match(/<key>NS\w*UsageDescription<\/key>\s*<string>[^<]*<\/string>/g) ?? [];
+    const legacyUsage = usageBlocks.filter((block) => /screenpipe/i.test(block));
     record(
       "permission strings use the brand name",
-      !/\bscreenpipe\b/i.test(plistText),
-      (plistText.match(/\bscreenpipe\b/gi) ?? []).join(",") || "",
+      legacyUsage.length === 0,
+      legacyUsage.map((block) => block.slice(0, 60)).join(" | "),
     );
   }
 

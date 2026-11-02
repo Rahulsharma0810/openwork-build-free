@@ -112,7 +112,11 @@ function rewriteHosts(brand: Brand): void {
     `${APP_DIR}/components`,
     "crates",
   ];
-  const exts = new Set([".rs", ".ts", ".tsx", ".js", ".mjs", ".swift", ".json"]);
+  // The Tauri binary embeds the Next.js static export (`frontendDist: ../out`)
+  // and never touches Contents/Resources, so brand the built site too when it
+  // exists (build-free.yml builds the frontend before `tauri build`).
+  if (existsSync(join(REPO_ROOT, `${APP_DIR}/out`))) roots.push(`${APP_DIR}/out`);
+  const exts = new Set([".rs", ".ts", ".tsx", ".js", ".mjs", ".swift", ".json", ".html", ".css", ".jsx"]);
   const skipDirs = new Set(["node_modules", "target", ".git", "dist", "out", ".next", "gen"]);
   const from = ["https://api.screenpipe.com", "https://screenpipe.com", "https://screenpi.pe", "https://us.i.posthog.com"];
   const to = brand.offline.webBase;
@@ -156,7 +160,7 @@ function rewriteHosts(brand: Brand): void {
         }
         return inStr;
       };
-      if (!entry.endsWith(".json")) {
+      if (!entry.endsWith(".json") && !entry.endsWith(".html") && !entry.endsWith(".css")) {
         const commentRe = entry.endsWith(".rs")
           ? /^\s*\/\/[^/\n]*$/gm // Rust: only `//` lines; `#` starts attributes
           : /^\s*(\/\/[^/\n]*|\/\/\/[^\n]*|#[^\n]*)$/gm;
@@ -253,6 +257,7 @@ function main(): void {
     find: /\bscreenpipe\b/gi,
     replace: pn,
   });
+
 
   // ------------------------------------------------------------ app menu UI
   applyRule({

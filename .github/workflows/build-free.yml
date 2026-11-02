@@ -969,6 +969,20 @@ jobs:
           mv "$tmp" "$CONF"
           jq '.plugins.updater, .bundle.createUpdaterArtifacts' "$CONF"
 
+      - name: Build production frontend (pre-branding)
+        # `tauri build` only runs the beforeBuildCommand (`bun run
+        # build:production`) when `frontendDist` points at a dev URL; with a
+        # static export it embeds whatever is already in `out/`. Build it here
+        # so the white-label pass can brand the generated assets before they
+        # are compiled into the binary.
+        if: env.PATCH_WHITE_LABEL == 'true'
+        working-directory: apps/screenpipe-app-tauri
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run build:production
+          test -d out && echo "frontend export: $(find out -type f | wc -l) file(s)"
+
       - name: Checkout white-label scripts
         if: env.PATCH_WHITE_LABEL == 'true'
         uses: actions/checkout@v6
@@ -1448,15 +1462,17 @@ jobs:
           # re-introduce it after our source-level patch.
           if [ "${PATCH_WHITE_LABEL:-false}" = "true" ] && [ -n "${BRAND_TITLE:-}" ]; then
             PLIST="$APP/Contents/Info.plist"
-            for k in NSMicrophoneUsageDescription NSScreenCaptureUsageDescription NSCameraUsageDescription NSAccessibilityUsageDescription NSAppleEventsUsageDescription; do
-              cur=$(/usr/libexec/PlistBuddy -c "Print :$k" "$PLIST" 2>/dev/null || echo "")
-              case "$cur" in
-                *screenpipe*|*Screenpipe*|*SCREENPIPE*)
-                  new=$(printf '%s' "$cur" | sed -E "s/[sS]creenpipe/${BRAND_TITLE}/g")
-                  /usr/libexec/PlistBuddy -c "Set :$k $new" "$PLIST" && echo "  rebranded $k"
-                  ;;
-              esac
-            done
+            # sed on the raw XML, not PlistBuddy per-key: Tauri's bundler
+            # injects some UsageDescription strings from its own template, so
+            # only a whole-file rewrite is guaranteed to catch every key.
+            # Rebrand only <string> values; keys (LSEnvironment SCREENPIPE_*,
+            # ScreenpipeManualHandoffProtocol) must stay as-is because the
+            # Rust code reads them.
+            if /usr/bin/grep -qiE "screenpipe" "$PLIST"; then
+              /usr/bin/sed -i '' -E "/<string>/s/[sS]creenpipe/${BRAND_TITLE}/g" "$PLIST"
+              echo "  rebranded Info.plist <string> values:"
+              /usr/bin/grep -n "<string>${BRAND_TITLE}" "$PLIST" | head
+            fi
           fi
 
       - name: Import code-signing identity (temp keychain)

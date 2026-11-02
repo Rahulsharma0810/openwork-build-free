@@ -124,7 +124,13 @@ function rewriteHosts(brand: Brand): void {
   // .sql is required: sqlx::migrate!("./src/migrations") in screenpipe-db
   // embeds every migration file (with its screenpi.pe header comment) into the
   // compiled binary. .c is required: build scripts compile shim/test C files.
-  const exts = new Set([".rs", ".ts", ".tsx", ".js", ".mjs", ".swift", ".json", ".html", ".css", ".jsx", ".sql", ".c", ".toml"]);
+  // .md / .patch / .txt are required: pi.rs / pi_compaction.rs / acp runtime
+  // include_str! dozens of skill prompts, pipe docs and .patch files, all of
+  // which land verbatim in the binary's string section.
+  const exts = new Set([
+    ".rs", ".ts", ".tsx", ".js", ".mjs", ".swift", ".json", ".html", ".css",
+    ".jsx", ".sql", ".c", ".toml", ".md", ".patch", ".txt",
+  ]);
   const skipDirs = new Set(["node_modules", "target", ".git", "dist", "out", ".next", "gen"]);
   const from = ["https://api.screenpipe.com", "https://screenpipe.com", "https://screenpi.pe", "https://us.i.posthog.com"];
   const to = brand.offline.webBase;

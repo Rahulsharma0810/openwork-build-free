@@ -379,6 +379,20 @@ function main(): void {
     find: '.title("screenpipe")',
     replace: `.title("${pn}")`,
   });
+  // macOS Background Task Management names the login item after the
+  // autostart plugin's app_name, which defaults to the Cargo package name
+  // ("screenpipe-app") — not the bundle productName. Name it after the brand
+  // so the "can run in the background" prompt and Login Items show Worklog.
+  applyRule({
+    label: "autostart login-item name",
+    file: `${TAURI_DIR}/src/main.rs`,
+    find: "let builder = tauri_plugin_autostart::Builder::new().args([AUTOSTART_ARG]);",
+    replace:
+      "let builder = tauri_plugin_autostart::Builder::new()\n" +
+      `                .app_name("${pn}")\n` +
+      "                .args([AUTOSTART_ARG]);",
+    expect: 1,
+  });
 
   // ------------------------------------------------------- identity coupling
   applyRule({

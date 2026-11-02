@@ -216,6 +216,9 @@ function rewriteHosts(brand: Brand): void {
 
   roots.forEach(walk);
   results.push({ label: "host rewrite", file: `${roots.join(", ")}`, count: hits, state: CHECK_ONLY ? "checked" : `applied in ${files} file(s)` });
+  // Surface the count in CI logs: a low number here with a later verify-gate
+  // binary hit means a host is entering via a vector this walk misses.
+  console.log(`white-label: host rewrite — ${hits} host(s) across ${files} file(s)`);
 }
 
 function main(): void {
@@ -254,6 +257,17 @@ function main(): void {
       }
       if (json.plugins?.["deep-link"]?.desktop?.schemes) {
         json.plugins["deep-link"].desktop.schemes = [scheme];
+      }
+      // Associated-domains / universal-link hosts name screenpipe.com and are
+      // embedded in the compiled config JSON. The offline build has no domain,
+      // so point them at the loopback discard host.
+      const mobile = json.plugins?.["deep-link"]?.mobile;
+      if (Array.isArray(mobile)) {
+        for (const entry of mobile) {
+          if (entry && typeof entry.host === "string" && /screenpipe\.com|screenpi\.pe/.test(entry.host)) {
+            entry.host = "127.0.0.1";
+          }
+        }
       }
       if (json.app?.trayIcon) json.app.trayIcon.id = brand.trayId;
     });

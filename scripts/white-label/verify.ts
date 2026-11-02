@@ -64,6 +64,13 @@ function findApp(brand: { productName: string }): string {
 function scanText(label: string, text: string): void {
   const hits = FORBIDDEN.filter((token) => text.includes(token));
   record(`${label}: no screenpipe service hosts or keys`, hits.length === 0, hits.join(", "));
+  // Dump the offending strings with a little context so the source of a leak
+  // is identifiable from CI logs instead of guessed.
+  for (const token of hits) {
+    const idx = text.indexOf(token);
+    const ctx = text.slice(Math.max(0, idx - 40), idx + token.length + 40).replace(/\n/g, "\\n");
+    console.log(`  leak-context[${token}]: …${ctx}…`);
+  }
 }
 
 function main(): void {

@@ -1439,6 +1439,24 @@ jobs:
             fi
           fi
 
+          # Make CFBundleExecutable point at a real binary. When productName is
+          # rebranded away from the Cargo binary name, Tauri's bundler can write
+          # a CFBundleExecutable ("Worklog-app") that has no matching file in
+          # Contents/MacOS (the binary stays "screenpipe-app"), and macOS reports
+          # the app as "damaged or incomplete". Resolve it from the actual
+          # executable on disk, post-bundle, before signing.
+          PLIST="$APP/Contents/Info.plist"
+          EXE_CUR=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST" 2>/dev/null || echo "")
+          if [ -n "$EXE_CUR" ] && [ ! -f "$APP/Contents/MacOS/$EXE_CUR" ]; then
+            # Pick the main Mach-O executable that actually shipped.
+            EXE_REAL=$(/usr/bin/find "$APP/Contents/MacOS" -maxdepth 1 -type f -perm +111 \
+              ! -name '*.dylib' ! -name '*.metallib' ! -name 'bun' ! -name 'ffmpeg' ! -name 'ffprobe' \
+              | /usr/bin/head -1 | /usr/bin/xargs -I{} basename {})
+            EXE_REAL="${EXE_REAL:-screenpipe-app}"
+            echo "CFBundleExecutable '$EXE_CUR' has no matching binary; pointing it at '$EXE_REAL'"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $EXE_REAL" "$PLIST"
+          fi
+
           # Ensure TCC usage-description keys exist BEFORE signing. macOS can
           # silently drop or fail to persist a permission grant when the matching
           # Usage-Description string is missing. Upstream ships Mic + ScreenCapture

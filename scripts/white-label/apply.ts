@@ -252,6 +252,12 @@ function main(): void {
     editJson(path, `identity ${file}`, (json) => {
       json.productName = pn;
       json.identifier = bid;
+      // Renaming productName makes the bundler derive CFBundleExecutable from it
+      // ("Worklog-app"), but the compiled Cargo binary is still "screenpipe-app"
+      // and is copied under that name — leaving CFBundleExecutable dangling, which
+      // macOS reports as "the application is damaged or incomplete". Pin the
+      // executable name to the real binary so the plist resolves.
+      json.mainBinaryName = "screenpipe-app";
       if (json.bundle) {
         json.bundle.publisher = brand.publisher;
         if (!KEEP_SELF_UPDATER) delete json.bundle.createUpdaterArtifacts;

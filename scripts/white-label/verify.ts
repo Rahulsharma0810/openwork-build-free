@@ -109,6 +109,16 @@ function main(): void {
     }
     record("offline env baked into Info.plist", offlineEnv, offlineEnv ? "" : env.out.slice(0, 120));
 
+    // A renamed productName without a matching binary leaves CFBundleExecutable
+    // pointing at a missing file -> macOS reports "damaged or incomplete".
+    const exe = runAllowFail("plutil", ["-extract", "CFBundleExecutable", "raw", infoPlist]);
+    const exeName = exe.code === 0 ? exe.out.trim() : "";
+    record(
+      "CFBundleExecutable resolves to a real binary",
+      exeName.length > 0 && existsSync(join(appPath, "Contents", "MacOS", exeName)),
+      exeName ? `Contents/MacOS/${exeName}` : "no CFBundleExecutable",
+    );
+
     const plistText = readFileSync(infoPlist, "utf8");
     // Only the user-facing permission strings must carry the brand; the
     // LSEnvironment vars (SCREENPIPE_*) intentionally keep their upstream

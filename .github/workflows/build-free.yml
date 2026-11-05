@@ -1620,6 +1620,10 @@ jobs:
           echo "Creating DMG ..."
           DMG_DIR="$BUNDLE/dmg"
           mkdir -p "$DMG_DIR"
+          # Tauri's bundler may already have written its own DMG here
+          # (Worklog_<ver>_aarch64.dmg) from the app BEFORE this step signed it,
+          # i.e. ad-hoc. Remove it so only the signed DMG can be shipped.
+          rm -f "$DMG_DIR"/*.dmg
           APP_NAME="$(basename "$APP" .app)"
           DMG_PATH="$DMG_DIR/$APP_NAME.dmg"
           hdiutil create -volname "$APP_NAME" \
@@ -1637,6 +1641,18 @@ jobs:
           DMG=$(find "$BUNDLE/dmg"   -maxdepth 1 -type f -name "*.dmg" | head -1 || true)
           echo "Found app: $APP"
           echo "Found dmg: ${DMG:-<none>}"
+          # The DMG must contain the cert-signed app, not an ad-hoc copy:
+          # an ad-hoc app gets a per-build cdhash requirement, so macOS drops
+          # Screen Recording / Mic / Accessibility grants on every update.
+          if [ -n "$DMG" ]; then
+            MNT=$(mktemp -d)
+            hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG" >/dev/null
+            DMG_APP=$(find "$MNT" -maxdepth 1 -type d -name "*.app" | head -1)
+            SIG=$(/usr/bin/codesign -dvv "$DMG_APP" 2>&1 || true)
+            hdiutil detach -quiet "$MNT" || true
+            echo "$SIG" | grep -E '^(Authority|Signature)=' || true
+            echo "$SIG" | grep -qx "Authority=$SIGN_IDENTITY" || { echo "::error::app inside $DMG is not signed by $SIGN_IDENTITY"; exit 1; }
+          fi
           echo "app_path=$APP" >> "$GITHUB_OUTPUT"
           echo "dmg_path=$DMG" >> "$GITHUB_OUTPUT"
 

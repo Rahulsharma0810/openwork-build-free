@@ -121,9 +121,8 @@ function rewriteHosts(brand: Brand): void {
   // and never touches Contents/Resources, so brand the built site too when it
   // exists (build-free.yml builds the frontend before `tauri build`).
   if (existsSync(join(REPO_ROOT, `${APP_DIR}/out`))) roots.push(`${APP_DIR}/out`);
-  // .sql is required: sqlx::migrate!("./src/migrations") in screenpipe-db
-  // embeds every migration file (with its screenpi.pe header comment) into the
-  // compiled binary. .c is required: build scripts compile shim/test C files.
+  // .sql covers non-migration SQL only; sqlx migrations are skipped below
+  // (checksummed). .c is required: build scripts compile shim/test C files.
   // .md / .patch / .txt are required: pi.rs / pi_compaction.rs / acp runtime
   // include_str! dozens of skill prompts, pipe docs and .patch files, all of
   // which land verbatim in the binary's string section.
@@ -152,6 +151,13 @@ function rewriteHosts(brand: Brand): void {
       }
       const dot = entry.lastIndexOf(".");
       if (dot < 0 || !exts.has(entry.slice(dot))) continue;
+      // Never touch sqlx migrations. sqlx records a checksum of every applied
+      // migration file (comments included); changing even the header comment
+      // makes an existing db.sqlite refuse to open ("migration … was
+      // previously applied but has been modified"), so the engine never
+      // starts. Their only host is the inert `-- https://screenpi.pe` header
+      // comment, which verify.ts tolerates in that exact SQL-comment form.
+      if (entry.endsWith(".sql") && rel.split("/").includes("migrations")) continue;
       let text: string;
       try {
         text = readFileSync(entryAbs, "utf8");

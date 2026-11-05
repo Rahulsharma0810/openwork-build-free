@@ -140,7 +140,13 @@ function main(): void {
 
   for (const binary of binaries) {
     const out = runAllowFail("strings", ["-a", join(macosDir, binary)]);
-    scanText(`binary ${binary}`, out.out);
+    // sqlx::migrate! embeds the migration files verbatim, and apply.ts must
+    // leave them byte-identical (sqlx checksums them). Their header comment
+    // `-- https://screenpi.pe` is SQL comment text, never a request target, so
+    // drop exactly that form before scanning. Any other occurrence still fails.
+    const migrationHeaders = (out.out.match(/--[ \t]*https:\/\/screenpi\.pe(?![\w./-])/g) ?? []).length;
+    if (migrationHeaders > 0) console.log(`info  binary ${binary}: ignored ${migrationHeaders} sqlx migration header comment(s)`);
+    scanText(`binary ${binary}`, out.out.replace(/--[ \t]*https:\/\/screenpi\.pe(?![\w./-])/g, ""));
     const legacy = (out.out.match(/\bscreenpipe\b/gi) ?? []).length;
     if (legacy > 0) console.log(`info  binary ${binary}: ${legacy} legacy "screenpipe" token(s) remain (copy, not identity)`);
   }

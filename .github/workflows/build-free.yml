@@ -1439,27 +1439,6 @@ jobs:
             fi
           fi
 
-          # Make CFBundleExecutable point at a real binary. When productName is
-          # rebranded away from the Cargo binary name, Tauri's bundler can write
-          # a CFBundleExecutable that has no matching file in Contents/MacOS
-          # (the compiled binary keeps the Cargo name), and macOS reports the
-          # app as "damaged or incomplete". Reconcile it to the actual main
-          # executable on disk, post-bundle, before signing — unconditionally.
-          PLIST="$APP/Contents/Info.plist"
-          EXE_CUR=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST" 2>/dev/null || echo "")
-          # The main binary is the executable that is not a known sidecar/lib.
-          EXE_REAL=$(/usr/bin/find "$APP/Contents/MacOS" -maxdepth 1 -type f \
-            ! -name '*.dylib' ! -name '*.metallib' ! -name 'bun' ! -name 'ffmpeg' ! -name 'ffprobe' \
-            -exec /usr/bin/file {} \; 2>/dev/null \
-            | /usr/bin/grep 'Mach-O 64-bit executable' | /usr/bin/head -1 \
-            | /usr/bin/sed -E 's#.*/([^:]+):.*#\1#')
-          echo "CFBundleExecutable on disk: '$EXE_CUR'; main binary found: '${EXE_REAL:-<none>}'"
-          /usr/bin/find "$APP/Contents/MacOS" -maxdepth 1 -type f | /usr/bin/sed 's/^/  MacOS: /'
-          if [ -n "$EXE_REAL" ] && [ "$EXE_CUR" != "$EXE_REAL" ]; then
-            echo "Repointing CFBundleExecutable '$EXE_CUR' -> '$EXE_REAL'"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $EXE_REAL" "$PLIST"
-          fi
-
           # Ensure TCC usage-description keys exist BEFORE signing. macOS can
           # silently drop or fail to persist a permission grant when the matching
           # Usage-Description string is missing. Upstream ships Mic + ScreenCapture
@@ -1495,6 +1474,30 @@ jobs:
               /usr/bin/grep -n "<string>${BRAND_TITLE}" "$PLIST" | head
             fi
           fi
+
+          # Make CFBundleExecutable point at a real binary. When productName is
+          # rebranded away from the Cargo binary name, Tauri's bundler can write
+          # a CFBundleExecutable that has no matching file in Contents/MacOS
+          # (the compiled binary keeps the Cargo name), and macOS reports the
+          # app as "damaged or incomplete". Reconcile it to the actual main
+          # executable on disk, post-bundle, before signing — unconditionally.
+          PLIST="$APP/Contents/Info.plist"
+          EXE_CUR=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST" 2>/dev/null || echo "")
+          # The main binary is the executable that is not a known sidecar/lib.
+          EXE_REAL=$(/usr/bin/find "$APP/Contents/MacOS" -maxdepth 1 -type f \
+            ! -name '*.dylib' ! -name '*.metallib' ! -name 'bun' ! -name 'ffmpeg' ! -name 'ffprobe' \
+            -exec /usr/bin/file {} \; 2>/dev/null \
+            | /usr/bin/grep 'Mach-O 64-bit executable' | /usr/bin/head -1 \
+            | /usr/bin/sed -E 's#.*/([^:]+):.*#\1#')
+          echo "CFBundleExecutable on disk: '$EXE_CUR'; main binary found: '${EXE_REAL:-<none>}'"
+          /usr/bin/find "$APP/Contents/MacOS" -maxdepth 1 -type f | /usr/bin/sed 's/^/  MacOS: /'
+          EXE_REAL="${EXE_REAL:-screenpipe-app}"
+          if [ -n "$EXE_REAL" ] && [ "$EXE_CUR" != "$EXE_REAL" ]; then
+            echo "Repointing CFBundleExecutable '$EXE_CUR' -> '$EXE_REAL'"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $EXE_REAL" "$PLIST"
+          fi
+
+
 
       - name: Import code-signing identity (temp keychain)
         shell: bash

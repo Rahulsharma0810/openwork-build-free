@@ -1706,7 +1706,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ASSET_PREFIX || 'screenpipe' }}-macos-arm64-${{ steps.feats.outputs.version }}
-          path: ${{ runner.temp }}/stage/*
+          # Only the installer. The updater files (tar.gz, .sig, latest.json)
+          # still go to the GitHub Release, where the self-updater reads them.
+          path: ${{ runner.temp }}/stage/*.dmg
           if-no-files-found: error
           retention-days: 14
 

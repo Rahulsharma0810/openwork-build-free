@@ -155,7 +155,7 @@ function rewriteHosts(brand: Brand): void {
       // migration file (comments included); changing even the header comment
       // makes an existing db.sqlite refuse to open ("migration … was
       // previously applied but has been modified"), so the engine never
-      // starts. Their only host is the inert `-- https://screenpi.pe` header
+      // starts. Their only hosts are inert `-- https://…` header lines
       // comment, which verify.ts tolerates in that exact SQL-comment form.
       if (entry.endsWith(".sql") && rel.split("/").includes("migrations")) continue;
       let text: string;

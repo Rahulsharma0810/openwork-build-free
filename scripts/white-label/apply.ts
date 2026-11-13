@@ -287,7 +287,16 @@ function main(): void {
           }
         }
       }
-      if (json.app?.trayIcon) json.app.trayIcon.id = brand.trayId;
+      // The tray id is internal (never shown) and the Rust side looks the icon
+      // up by the literal id (tray_by_id("screenpipe_main")), so it must stay
+      // as upstream ships it. Renaming it leaves the icon without a menu.
+      const trayId = json.app?.trayIcon?.id;
+      if (trayId) {
+        const trayRs = readFileSync(join(TAURI_DIR, "src", "tray.rs"), "utf8");
+        if (!trayRs.includes(`tray_by_id("${trayId}")`)) {
+          fail(`[tray] tauri.conf.json trayIcon.id "${trayId}" is not looked up by src/tray.rs`);
+        }
+      }
     });
   }
 

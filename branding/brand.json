@@ -4,7 +4,6 @@
   "bundleId": "worklog.rvs.memory",
   "publisher": "Rahul Sharma",
   "scheme": "worklog",
-  "trayId": "worklog_main",
   "offline": {
     "webBase": "http://127.0.0.1:9",
     "aiBaseUrl": "http://localhost:11434/v1",

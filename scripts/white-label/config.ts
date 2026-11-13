@@ -7,7 +7,6 @@ export type Brand = {
   bundleId: string;
   publisher: string;
   scheme: string;
-  trayId: string;
   offline: {
     webBase: string;
     aiBaseUrl: string;
@@ -55,7 +54,6 @@ export function loadBrand(root: string = REPO_ROOT): Brand {
   assert(brand.bundleId, "bundleId");
   assert(brand.publisher, "publisher");
   assert(brand.scheme, "scheme");
-  assert(brand.trayId, "trayId");
   return brand;
 }
 

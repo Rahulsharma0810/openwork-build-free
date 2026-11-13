@@ -26,6 +26,10 @@
 #     GitHub Release latest.json) instead of screenpipe.com, sends no cloud
 #     token there, and is no longer disabled as a "source build". The
 #     workflow sets plugins.updater endpoints/pubkey in tauri.conf.json.
+#   PATCH_NO_EXTERNAL_CHAT_SYNC=true|false  (default true)
+#     Don't mirror ~/.claude/projects or ~/.codex/sessions into the chat list
+#     automatically (OpenCode / Agent SDK sessions land there too). The manual
+#     Import dialog still works.
 #
 # Last verified against screenpipe/screenpipe main @ 6e9f48b (2026-10-05).
 set -euo pipefail
@@ -36,6 +40,7 @@ PATCH_LOCAL_ACCESS="${PATCH_LOCAL_ACCESS:-true}"
 PATCH_UNLIMITED_PIPES="${PATCH_UNLIMITED_PIPES:-true}"
 PATCH_NO_TRIAL_PAYWALL="${PATCH_NO_TRIAL_PAYWALL:-true}"
 PATCH_SELF_UPDATER="${PATCH_SELF_UPDATER:-true}"
+PATCH_NO_EXTERNAL_CHAT_SYNC="${PATCH_NO_EXTERNAL_CHAT_SYNC:-true}"
 SELF_UPDATER_ENDPOINT="${SELF_UPDATER_ENDPOINT:-https://github.com/Rahulsharma0810/openwork-build-free/releases/latest/download/latest.json}"
 
 # replace_exact FILE FROM TO LABEL — literal (non-regex) single-occurrence replace.
@@ -199,4 +204,17 @@ if [ "$PATCH_SELF_UPDATER" = "true" ]; then
 '    false' "self-updater"
 else
   echo "[self-updater] skipped (PATCH_SELF_UPDATER=$PATCH_SELF_UPDATER)"
+fi
+
+if [ "$PATCH_NO_EXTERNAL_CHAT_SYNC" = "true" ]; then
+  # The chat sidebar starts this watcher with no options; tests pass an
+  # explicit home and still exercise the real code.
+  replace_exact "apps/screenpipe-app-tauri/lib/chat/external-chat-sync.ts" \
+'  const home = await resolveExternalChatHome(options.home);' \
+'  if (options.home === undefined) {
+    return { syncNow: async () => false, stop: () => {} };
+  }
+  const home = await resolveExternalChatHome(options.home);' "no-external-chat-sync"
+else
+  echo "[no-external-chat-sync] skipped (PATCH_NO_EXTERNAL_CHAT_SYNC=$PATCH_NO_EXTERNAL_CHAT_SYNC)"
 fi
